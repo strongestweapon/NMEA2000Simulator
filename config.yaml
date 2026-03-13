@@ -1,0 +1,58 @@
+# NMEA 2000 Wind Data Simulator Configuration
+
+gpx:
+  file: data/raw/RCSR2026.gpx
+  max_speed_knots: 30          # GPS jump filter threshold
+  resample_gap_sec: 300        # gaps longer than this get resampled (5 min)
+  resample_interval_sec: 60    # resample to this interval (1 min)
+
+era5:
+  cache_dir: data/era5
+  dataset: reanalysis-era5-single-levels
+  variables:
+    - 10m_u_component_of_wind
+    - 10m_v_component_of_wind
+  area:                        # N, W, S, E
+    north: 23.0
+    west: 113.5
+    south: 14.0
+    east: 121.0
+  time_buffer_hours: 1         # extra hours before/after track
+
+noise:
+  aws_sigma: 0.3               # knots, Gaussian noise on AWS
+  awa_sigma: 2.0               # degrees, Gaussian noise on AWA
+  gust:
+    min_duration_sec: 30
+    max_duration_sec: 120
+    min_boost_knots: 3.0
+    max_boost_knots: 8.0
+    avg_per_hour: 2.0          # average gusts per hour
+  gaps:
+    short:
+      min_sec: 3
+      max_sec: 10
+      per_hour: 3.0            # average per hour
+    offline:
+      min_sec: 30
+      max_sec: 300
+      per_hour: 0.5            # average per hour
+    spike:
+      per_hour: 1.0            # spikes per hour
+      min_multiplier: 3.0
+      max_multiplier: 10.0
+
+quality:
+  missing: 0
+  normal: 1
+  interpolated: 2
+  suspect: 3
+
+output:
+  csv: data/output/simulated_wind.csv
+  events: data/output/events.csv
+  validation_dir: data/output/validation
+
+stream:
+  baudrate: 115200
+  default_speed: 1             # playback multiplier

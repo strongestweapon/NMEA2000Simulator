@@ -1,0 +1,11 @@
+cdsapi>=0.7.0
+gpxpy>=1.6.0
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+folium>=0.14
+netCDF4>=1.6
+pyserial>=3.5
+PyYAML>=6.0
+windrose>=1.9

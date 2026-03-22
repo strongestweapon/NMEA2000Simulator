@@ -10,8 +10,8 @@ build/
 # ERA5 cache (large netCDF files)
 data/era5/*.nc
 
-# Output files (regenerable)
-data/output/
+# Output cache (pickle files)
+data/output/.cache/
 
 # Environment
 .env

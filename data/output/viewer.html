@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lisa Elaine - RCSR 2026 Wind Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital@1&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; color: #222; overflow: hidden; }
+
+#map { position: absolute; top: 0; left: 0; right: 360px; bottom: 60px; z-index: 0; }
+#sidebar { position: absolute; top: 0; right: 0; width: 360px; bottom: 60px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); overflow-y: auto; border-left: 1px solid #ddd; }
+#controls {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 60px;
+  background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+  border-top: 1px solid #ddd; display: flex; align-items: center; padding: 0 16px; gap: 12px;
+}
+
+/* Title */
+#title-overlay {
+  position: absolute; top: 12px; left: 12px; z-index: 1000; pointer-events: none;
+}
+#title-overlay .boat-name {
+  font-family: 'Playfair Display', serif; font-style: italic;
+  font-size: 32px; color: #333; line-height: 1.1;
+  text-shadow: 0 0 8px #fff, 0 0 16px #fff, 0 0 24px #fff;
+}
+#title-overlay .race-name {
+  font-size: 11px; color: #666; letter-spacing: 1.5px; text-transform: uppercase;
+  text-shadow: 0 0 6px #fff, 0 0 12px #fff;
+}
+
+/* Sidebar instruments */
+.section-title {
+  font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+  color: #999; padding: 12px 16px 4px; font-weight: 600;
+}
+.instruments {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px; padding: 4px 8px;
+}
+.inst {
+  background: #f8f8f8; border-radius: 8px; padding: 10px 12px; text-align: center;
+}
+.inst .label { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #999; margin-bottom: 2px; }
+.inst .value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.inst .unit { font-size: 11px; color: #999; }
+
+/* Compass */
+#compass-container { padding: 12px 16px; display: flex; justify-content: center; gap: 24px; }
+.compass {
+  width: 140px; height: 140px; position: relative;
+  border: 2px solid #ddd; border-radius: 50%; background: #fff;
+}
+.compass-label {
+  text-align: center; font-size: 9px; letter-spacing: 1px; text-transform: uppercase;
+  color: #999; margin-bottom: 4px;
+}
+.compass .cardinal {
+  position: absolute; font-size: 10px; color: #999; font-weight: 600;
+  width: 20px; text-align: center;
+}
+.compass .cardinal.n { top: 4px; left: 50%; transform: translateX(-50%); color: #d32f2f; }
+.compass .cardinal.s { bottom: 4px; left: 50%; transform: translateX(-50%); }
+.compass .cardinal.e { right: 4px; top: 50%; transform: translateY(-50%); }
+.compass .cardinal.w { left: 4px; top: 50%; transform: translateY(-50%); }
+.compass .needle {
+  position: absolute; top: 50%; left: 50%;
+  width: 3px; height: 50px; margin-left: -1.5px; margin-top: -45px;
+  transform-origin: 1.5px 45px; transition: transform 0.3s ease;
+  border-radius: 2px;
+}
+.compass .speed-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.compass .speed-unit {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, 60%);
+  font-size: 9px; color: #999;
+}
+
+/* Time display */
+.time-display { padding: 10px 16px; text-align: center; border-bottom: 1px solid #eee; }
+.time-display .datetime { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; color: #333; }
+.time-display .elapsed { font-size: 12px; color: #999; }
+
+/* Controls */
+#play-btn {
+  background: none; border: 2px solid #1976d2; color: #1976d2;
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; line-height: 1; padding: 0;
+}
+#play-btn:hover { background: rgba(25, 118, 210, 0.1); }
+#timeline {
+  flex: 1; -webkit-appearance: none; appearance: none;
+  height: 6px; background: #ccc; border-radius: 3px; outline: none; cursor: pointer;
+}
+#timeline::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px;
+  background: #1976d2; border-radius: 50%; cursor: grab;
+}
+#speed-select {
+  background: #fff; color: #333; border: 1px solid #ccc;
+  padding: 4px 8px; border-radius: 4px; font-size: 12px;
+}
+
+#wind-toggle {
+  background: #fff; border: 1px solid #ccc; padding: 4px 8px;
+  border-radius: 4px; font-size: 12px; cursor: pointer; flex-shrink: 0;
+}
+#wind-toggle.active { background: #1976d2; color: #fff; border-color: #1976d2; }
+
+/* Wind legend */
+#wind-legend {
+  position: absolute; bottom: 70px; left: 12px; z-index: 1000;
+  background: rgba(255,255,255,0.9); backdrop-filter: blur(6px);
+  border-radius: 6px; padding: 8px 10px; font-size: 10px; display: none;
+}
+#wind-legend.visible { display: block; }
+#wind-legend .legend-title { font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #666; margin-bottom: 4px; }
+#wind-legend .legend-bar { height: 8px; width: 160px; border-radius: 4px; margin-bottom: 2px; }
+#wind-legend .legend-labels { display: flex; justify-content: space-between; color: #999; font-size: 9px; width: 160px; }
+
+/* Colors for values */
+.c-true { color: #e65100; }
+.c-apparent { color: #c62828; }
+.c-boat { color: #1565c0; }
+
+/* Wind layer canvas inside leaflet */
+.leaflet-wind-layer { mix-blend-mode: normal; }
+
+@media (max-width: 900px) {
+  #map { right: 0; bottom: 50%; }
+  #sidebar { top: 50%; left: 0; width: 100%; bottom: 60px; }
+  .instruments { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  #compass-container { gap: 12px; }
+  .compass { width: 100px; height: 100px; }
+  .compass .needle { height: 36px; margin-top: -32px; transform-origin: 1.5px 32px; }
+  .compass .speed-text { font-size: 16px; }
+  .inst .value { font-size: 22px; }
+  #title-overlay .boat-name { font-size: 24px; }
+}
+</style>
+</head>
+<body>
+
+<div id="title-overlay">
+  <div class="boat-name">NMEA 2000 Simulator</div>
+  <div class="race-name">Wind Data Dashboard</div>
+</div>
+
+<div id="map"></div>
+
+<div id="wind-legend">
+  <div class="legend-title">Wind Speed (kn)</div>
+  <div class="legend-bar" style="background:linear-gradient(to right, #3288bd, #66c2a5, #abdda4, #fee08b, #fdae61, #f46d43, #d53e4f, #9e0142);"></div>
+  <div class="legend-labels"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25+</span></div>
+</div>
+
+<div id="sidebar">
+  <div class="time-display">
+    <div class="datetime" id="v-datetime">--</div>
+    <div class="elapsed" id="v-elapsed">--</div>
+  </div>
+
+  <div class="section-title">True Wind</div>
+  <div id="compass-container">
+    <div>
+      <div class="compass-label">True Wind</div>
+      <div class="compass" id="comp-tw">
+        <span class="cardinal n">N</span><span class="cardinal s">S</span>
+        <span class="cardinal e">E</span><span class="cardinal w">W</span>
+        <div class="needle" id="needle-twd" style="background:#e65100;"></div>
+        <div class="speed-text c-true" id="comp-tws">--</div>
+        <div class="speed-unit">kn</div>
+      </div>
+    </div>
+    <div>
+      <div class="compass-label">Apparent Wind</div>
+      <div class="compass" id="comp-aw">
+        <span class="cardinal n">BOW</span><span class="cardinal s">STERN</span>
+        <span class="cardinal e">STB</span><span class="cardinal w">PORT</span>
+        <div class="needle" id="needle-awa" style="background:#c62828;"></div>
+        <div class="speed-text c-apparent" id="comp-aws">--</div>
+        <div class="speed-unit">kn</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title">Instruments</div>
+  <div class="instruments">
+    <div class="inst"><div class="label">TWS</div><div class="value c-true" id="v-tws">--</div><div class="unit">kn</div></div>
+    <div class="inst"><div class="label">TWD</div><div class="value c-true" id="v-twd">--</div><div class="unit">&deg;</div></div>
+    <div class="inst"><div class="label">TWA</div><div class="value c-true" id="v-twa">--</div><div class="unit">&deg;</div></div>
+    <div class="inst"><div class="label">AWS</div><div class="value c-apparent" id="v-aws">--</div><div class="unit">kn</div></div>
+    <div class="inst"><div class="label">AWA</div><div class="value c-apparent" id="v-awa">--</div><div class="unit">&deg;</div></div>
+    <div class="inst"><div class="label">Quality</div><div class="value" id="v-quality" style="font-size:14px;">--</div></div>
+  </div>
+
+  <div class="section-title">Navigation</div>
+  <div class="instruments">
+    <div class="inst"><div class="label">SOG</div><div class="value c-boat" id="v-sog">--</div><div class="unit">kn</div></div>
+    <div class="inst"><div class="label">COG</div><div class="value c-boat" id="v-cog">--</div><div class="unit">&deg;</div></div>
+    <div class="inst"><div class="label">BSP</div><div class="value c-boat" id="v-bsp">--</div><div class="unit">kn</div></div>
+    <div class="inst"><div class="label">Distance</div><div class="value c-boat" id="v-dist">--</div><div class="unit">nm</div></div>
+  </div>
+</div>
+
+<div id="controls">
+  <button id="play-btn">&#9654;</button>
+  <input type="range" id="timeline" min="0" max="100" value="0" />
+  <button id="wind-toggle" class="active">Wind</button>
+  <select id="speed-select">
+    <option value="1">1x</option>
+    <option value="5">5x</option>
+    <option value="10">10x</option>
+    <option value="50">50x</option>
+    <option value="100" selected>100x</option>
+    <option value="500">500x</option>
+  </select>
+</div>
+
+<script>
+const map = L.map('map', { zoomControl: false });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19
+}).addTo(map);
+
+let data = [];
+let marker = null;
+let trackPast = null;
+let trackFull = null;
+let playing = false;
+let playInterval = null;
+let windGrid = null;
+let windVisible = true;
+let currentEpoch = 0;
+
+const timeline = document.getElementById('timeline');
+const playBtn = document.getElementById('play-btn');
+const speedSelect = document.getElementById('speed-select');
+const windToggle = document.getElementById('wind-toggle');
+const windLegend = document.getElementById('wind-legend');
+
+// ── Wind color scale (Windy-style spectral) ──
+function windColor(spd) {
+  if (spd < 2)  return '#3288bd';
+  if (spd < 5)  return '#66c2a5';
+  if (spd < 8)  return '#abdda4';
+  if (spd < 12) return '#fee08b';
+  if (spd < 16) return '#fdae61';
+  if (spd < 20) return '#f46d43';
+  if (spd < 25) return '#d53e4f';
+  return '#9e0142';
+}
+
+// Circular interpolation for angles
+function lerpAngle(a, b, t) {
+  let diff = ((b - a + 540) % 360) - 180;
+  return ((a + diff * t) % 360 + 360) % 360;
+}
+
+// ── Wind Canvas Layer (inside Leaflet) ──
+L.WindCanvasLayer = L.Layer.extend({
+  onAdd(map) {
+    this._map = map;
+    // Create a custom pane above tiles but below markers
+    if (!map.getPane('windPane')) {
+      map.createPane('windPane').style.zIndex = 450;
+    }
+    this._canvas = L.DomUtil.create('canvas', 'leaflet-wind-layer', map.getPane('windPane'));
+    this._ctx = this._canvas.getContext('2d');
+    map.on('moveend zoomend resize viewreset', this._reset, this);
+    this._reset();
+  },
+  onRemove(map) {
+    L.DomUtil.remove(this._canvas);
+    map.off('moveend zoomend resize viewreset', this._reset, this);
+  },
+  setWind(epoch) {
+    this._epoch = epoch;
+    this._draw();
+  },
+  _reset() {
+    const size = this._map.getSize();
+    this._canvas.width = size.x * devicePixelRatio;
+    this._canvas.height = size.y * devicePixelRatio;
+    this._canvas.style.width = size.x + 'px';
+    this._canvas.style.height = size.y + 'px';
+    // Position canvas at the top-left of the map container
+    const topLeft = this._map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(this._canvas, topLeft);
+    this._draw();
+  },
+  _getWindAtTime(epoch) {
+    if (!windGrid) return null;
+    const times = windGrid.times;
+    if (epoch <= times[0]) return { spd: windGrid.spd[0], dir: windGrid.dir[0] };
+    if (epoch >= times[times.length - 1]) {
+      const last = times.length - 1;
+      return { spd: windGrid.spd[last], dir: windGrid.dir[last] };
+    }
+    let lo = 0, hi = times.length - 1;
+    while (lo < hi - 1) {
+      const mid = (lo + hi) >> 1;
+      if (times[mid] <= epoch) lo = mid; else hi = mid;
+    }
+    const t = (epoch - times[lo]) / (times[hi] - times[lo]);
+    const nLat = windGrid.lats.length, nLon = windGrid.lons.length;
+    const spd = [], dir = [];
+    for (let i = 0; i < nLat; i++) {
+      spd[i] = []; dir[i] = [];
+      for (let j = 0; j < nLon; j++) {
+        spd[i][j] = windGrid.spd[lo][i][j] * (1 - t) + windGrid.spd[hi][i][j] * t;
+        dir[i][j] = lerpAngle(windGrid.dir[lo][i][j], windGrid.dir[hi][i][j], t);
+      }
+    }
+    return { spd, dir };
+  },
+  _draw() {
+    const map = this._map;
+    const ctx = this._ctx;
+    const size = map.getSize();
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+    ctx.clearRect(0, 0, size.x, size.y);
+
+    if (!windVisible || !windGrid || !this._epoch) return;
+
+    const wind = this._getWindAtTime(this._epoch);
+    if (!wind) return;
+
+    const bounds = map.getBounds();
+    const zoom = map.getZoom();
+    const step = zoom < 7 ? 2 : 1;
+    const nLat = windGrid.lats.length;
+    const nLon = windGrid.lons.length;
+
+    for (let i = 0; i < nLat; i += step) {
+      const lat = windGrid.lats[i];
+      if (lat < bounds.getSouth() - 0.5 || lat > bounds.getNorth() + 0.5) continue;
+      for (let j = 0; j < nLon; j += step) {
+        const lon = windGrid.lons[j];
+        if (lon < bounds.getWest() - 0.5 || lon > bounds.getEast() + 0.5) continue;
+
+        const spd = wind.spd[i][j];
+        const dir = wind.dir[i][j];
+        if (spd < 0.5) continue;
+
+        const pt = map.latLngToContainerPoint([lat, lon]);
+        const color = windColor(spd);
+
+        // Arrow length proportional to speed
+        const len = Math.min(6 + spd * 1.0, 22);
+
+        // Wind direction is meteorological (FROM). Arrow points where wind GOES.
+        // Screen: x-right, y-down. North=up.
+        // dx = -sin(dir), dy = cos(dir) → direction wind goes on screen
+        const dirRad = dir * Math.PI / 180;
+        const dx = -Math.sin(dirRad);
+        const dy = Math.cos(dirRad);
+
+        // Draw from tail to tip
+        const tailX = pt.x - dx * len * 0.5;
+        const tailY = pt.y - dy * len * 0.5;
+        const tipX = pt.x + dx * len * 0.5;
+        const tipY = pt.y + dy * len * 0.5;
+
+        ctx.beginPath();
+        ctx.moveTo(tailX, tailY);
+        ctx.lineTo(tipX, tipY);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = spd > 15 ? 2.5 : spd > 8 ? 2 : 1.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Arrowhead
+        const headLen = len * 0.35;
+        const perpX = -dy;
+        const perpY = dx;
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(tipX - dx * headLen + perpX * headLen * 0.45,
+                   tipY - dy * headLen + perpY * headLen * 0.45);
+        ctx.lineTo(tipX - dx * headLen - perpX * headLen * 0.45,
+                   tipY - dy * headLen - perpY * headLen * 0.45);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+    }
+  }
+});
+
+const windLayer = new L.WindCanvasLayer();
+windLayer.addTo(map);
+
+// Toggle wind field
+windToggle.addEventListener('click', () => {
+  windVisible = !windVisible;
+  windToggle.classList.toggle('active', windVisible);
+  windLegend.classList.toggle('visible', windVisible);
+  windLayer._draw();
+});
+
+// ── Track & instruments ──
+const RACE_START_EPOCH = Date.UTC(2026, 2, 4, 3, 20, 0) / 1000;
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 3440.065;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function findIdx(t) {
+  let lo = 0, hi = data.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (data[mid].ts <= t) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+}
+
+function formatHKT(epoch) {
+  const d = new Date((epoch + 8 * 3600) * 1000);
+  const y = d.getUTCFullYear(), mo = d.getUTCMonth()+1, da = d.getUTCDate();
+  const h = d.getUTCHours(), mi = d.getUTCMinutes(), s = d.getUTCSeconds();
+  return `${y}/${String(mo).padStart(2,'0')}/${String(da).padStart(2,'0')} ${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(s).padStart(2,'0')} HKT`;
+}
+
+function formatElapsed(sec) {
+  if (sec < 0) return '--';
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  return d > 0 ? `${d}d ${h}h ${String(m).padStart(2,'0')}m` : `${h}h ${String(m).padStart(2,'0')}m`;
+}
+
+function qualityText(q) {
+  const m = {0: 'MISSING', 1: 'OK', 2: 'INTERPOLATED', 3: 'SUSPECT'};
+  return m[q] || '--';
+}
+
+function qualityColor(q) {
+  return {0: '#999', 1: '#2e7d32', 2: '#e65100', 3: '#c62828'}[q] || '#999';
+}
+
+function portStarboard(angle) {
+  if (angle === null || isNaN(angle)) return '--';
+  const abs = Math.abs(angle).toFixed(0);
+  if (angle < -1) return abs + '\u00b0 P';
+  if (angle > 1) return abs + '\u00b0 S';
+  return abs + '\u00b0';
+}
+
+let isZooming = false;
+let pendingEpoch = null;
+
+function updateView(epoch) {
+  if (isZooming) { pendingEpoch = epoch; return; }
+  currentEpoch = epoch;
+  const idx = findIdx(epoch);
+  const pt = data[idx];
+
+  // Update wind field
+  windLayer.setWind(epoch);
+
+  marker.setLatLng([pt.lat, pt.lon]);
+
+  const coords = data.slice(0, idx + 1).map(p => [p.lat, p.lon]);
+  trackPast.setLatLngs(coords);
+
+  const dist = pt._dist || 0;
+
+  document.getElementById('v-datetime').textContent = formatHKT(pt.ts);
+  document.getElementById('v-elapsed').textContent = 'Race time: ' + formatElapsed(pt.ts - RACE_START_EPOCH);
+
+  document.getElementById('v-tws').textContent = pt.tws != null ? pt.tws.toFixed(1) : '--';
+  document.getElementById('v-twd').textContent = pt.twd != null ? pt.twd.toFixed(0) + '\u00b0' : '--';
+  document.getElementById('v-twa').textContent = pt.twa != null ? portStarboard(pt.twa) : '--';
+  document.getElementById('v-aws').textContent = pt.aws != null ? pt.aws.toFixed(1) : '--';
+  document.getElementById('v-awa').textContent = pt.awa != null ? portStarboard(pt.awa) : '--';
+  document.getElementById('v-sog').textContent = pt.sog.toFixed(1);
+  document.getElementById('v-cog').textContent = pt.cog.toFixed(0) + '\u00b0';
+  document.getElementById('v-bsp').textContent = pt.bsp != null ? pt.bsp.toFixed(1) : '--';
+  document.getElementById('v-dist').textContent = dist.toFixed(1);
+
+  const qEl = document.getElementById('v-quality');
+  qEl.textContent = qualityText(pt.q);
+  qEl.style.color = qualityColor(pt.q);
+
+  if (pt.twd != null) {
+    document.getElementById('needle-twd').style.transform = `rotate(${pt.twd}deg)`;
+    document.getElementById('comp-tws').textContent = pt.tws.toFixed(0);
+  }
+  if (pt.awa != null) {
+    document.getElementById('needle-awa').style.transform = `rotate(${pt.awa}deg)`;
+    document.getElementById('comp-aws').textContent = pt.aws != null ? pt.aws.toFixed(0) : '--';
+  }
+}
+
+function init() {
+  data[0]._dist = 0;
+  for (let i = 1; i < data.length; i++) {
+    data[i]._dist = data[i-1]._dist + haversine(data[i-1].lat, data[i-1].lon, data[i].lat, data[i].lon);
+  }
+
+  const allCoords = data.map(p => [p.lat, p.lon]);
+
+  trackFull = L.polyline(allCoords, { color: '#ff5252', weight: 2, opacity: 0.2 }).addTo(map);
+  trackPast = L.polyline([], { color: '#ff5252', weight: 3, opacity: 0.9 }).addTo(map);
+
+  marker = L.circleMarker([data[0].lat, data[0].lon], {
+    radius: 7, fillColor: '#ff5722', fillOpacity: 1, color: '#fff', weight: 2
+  }).addTo(map);
+
+  map.on('zoomstart', () => { isZooming = true; });
+  map.on('zoomend', () => {
+    isZooming = false;
+    if (pendingEpoch !== null) { updateView(pendingEpoch); pendingEpoch = null; }
+  });
+
+  L.marker([data[0].lat, data[0].lon], {
+    icon: L.divIcon({ className: '', html: '<div style="background:#4caf50;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;">START</div>' })
+  }).addTo(map);
+  L.marker([data[data.length-1].lat, data[data.length-1].lon], {
+    icon: L.divIcon({ className: '', html: '<div style="background:#f44336;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;white-space:nowrap;">FINISH</div>' })
+  }).addTo(map);
+
+  map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
+
+  timeline.min = 0;
+  timeline.max = data[data.length-1].ts - data[0].ts;
+  timeline.value = 0;
+  updateView(data[0].ts);
+}
+
+timeline.addEventListener('input', () => {
+  updateView(data[0].ts + parseInt(timeline.value));
+});
+
+playBtn.addEventListener('click', () => {
+  playing = !playing;
+  playBtn.innerHTML = playing ? '&#9646;&#9646;' : '&#9654;';
+  if (playing) {
+    playInterval = setInterval(() => {
+      const speed = parseInt(speedSelect.value);
+      let curr = parseInt(timeline.value) + speed * 3;
+      const maxVal = parseInt(timeline.max);
+      if (curr >= maxVal) {
+        curr = maxVal; playing = false;
+        playBtn.innerHTML = '&#9654;';
+        clearInterval(playInterval);
+      }
+      timeline.value = curr;
+      updateView(data[0].ts + curr);
+    }, 50);
+  } else {
+    clearInterval(playInterval);
+  }
+});
+
+Promise.all([
+  fetch('track_data.json').then(r => r.json()),
+  fetch('wind_grid.json').then(r => r.json()).catch(() => null)
+]).then(([trackData, gridData]) => {
+  data = trackData;
+  windGrid = gridData;
+  if (windGrid) {
+    windLegend.classList.add('visible');
+    console.log('Wind grid loaded:', windGrid.lats.length, 'x', windGrid.lons.length, 'grid,', windGrid.times.length, 'time steps');
+  }
+  init();
+}).catch(err => {
+  document.getElementById('v-datetime').textContent = 'Failed to load data';
+  console.error(err);
+});
+</script>
+</body>
+</html>
